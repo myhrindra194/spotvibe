@@ -126,7 +126,7 @@ class SplashScreenState extends State<SplashScreen>
                     angle: _logoRotationAnimation.value,
                     child: Icon(
                       Icons.location_on,
-                      size: 100,
+                      size: 60,
                       color: Color(0xFF6200EE),
                     ),
                   ),
@@ -214,44 +214,6 @@ class SplashScreenState extends State<SplashScreen>
                         fontSize: 16,
                         color: Color(0xFF6200EE),
                       ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            SizedBox(height: 15),
-            FadeTransition(
-              opacity: _buttonFadeAnimations[2],
-              child: SlideTransition(
-                position: _buttonSlideAnimations[2],
-                child: SizedBox(
-                  width: 250,
-                  child: ElevatedButton(
-                    onPressed: () {},
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      padding: EdgeInsets.symmetric(vertical: 15),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        side: BorderSide(color: Colors.grey[300]!),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Image.asset(
-                          'assets/google_icon.webp',
-                          height: 24,
-                        ),
-                        SizedBox(width: 10),
-                        Text(
-                          'Sign Up with Google',
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            color: Colors.grey[800],
-                          ),
-                        ),
-                      ],
                     ),
                   ),
                 ),

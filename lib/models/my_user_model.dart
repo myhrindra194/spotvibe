@@ -1,16 +1,16 @@
-class User {
+class MyUser {
   String id;
   String email;
   String name;
 
-  User({
+  MyUser({
     required this.id,
     required this.email,
     required this.name,
   });
 
-  factory User.fromMap(Map<String, dynamic> data, String id) {
-    return User(
+  factory MyUser.fromMap(Map<String, dynamic> data, String id) {
+    return MyUser(
       id: id,
       email: data['email'],
       name: data['name'],
