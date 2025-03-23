@@ -6,7 +6,7 @@ import '../repositories/auth_repository.dart';
 class AuthViewModel with ChangeNotifier {
   final AuthRepository _authRepository = AuthRepository();
   MyUser? _user;
-  String? errorMessage; // Rendre public
+  String? errorMessage;
   bool _isLoading = false;
 
   MyUser? get user => _user;
@@ -18,9 +18,7 @@ class AuthViewModel with ChangeNotifier {
 
     _authRepository.signInWithEmail(email, password).then((user) {
       _user = user;
-      errorMessage = user == null
-          ? 'Password or email invalid'
-          : null; // Utiliser la propriété publique
+      errorMessage = user == null ? 'Password or email invalid' : null;
       _isLoading = false;
       notifyListeners();
     });
@@ -32,9 +30,7 @@ class AuthViewModel with ChangeNotifier {
 
     _authRepository.signInWithGoogle().then((user) {
       _user = user;
-      errorMessage = user == null
-          ? 'Failed to sign in with Google'
-          : null; // Utiliser la propriété publique
+      errorMessage = user == null ? 'Failed to sign in with Google' : null;
       _isLoading = false;
       notifyListeners();
     });

@@ -1,3 +1,5 @@
+// ignore_for_file: avoid_print
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -20,7 +22,6 @@ class AuthService {
     }
   }
 
-  // Connexion avec email et mot de passe
   Future<User?> signInWithEmailAndPassword(
       String email, String password) async {
     try {
@@ -35,7 +36,6 @@ class AuthService {
     }
   }
 
-  // Connexion avec Google
   Future<User?> signInWithGoogle() async {
     try {
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
@@ -56,7 +56,6 @@ class AuthService {
     }
   }
 
-  // Déconnexion
   Future<void> signOut() async {
     await _auth.signOut();
     await _googleSignIn.signOut();
