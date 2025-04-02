@@ -1,9 +1,16 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-
-import '../models/spot_model.dart';
+import 'package:flutter_application_1/models/spot_model.dart';
 
 class SpotRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  Stream<List<Spot>> getSpots() {
+    return _firestore
+        .collection('spots')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map(Spot.fromFirestore).toList());
+  }
 
   Future<void> addSpot(Spot spot) async {
     await _firestore.collection('spots').add(spot.toMap());
@@ -17,11 +24,12 @@ class SpotRepository {
     await _firestore.collection('spots').doc(id).delete();
   }
 
-  Future<List<Spot>> getNearbySpots(double latitude, double longitude) async {
-    // Implémentez la logique pour récupérer les spots dans un rayon de 2 km
-    final QuerySnapshot snapshot = await _firestore.collection('spots').get();
-    return snapshot.docs
-        .map((doc) => Spot.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+  Future<List<String>> getCategories() async {
+    final snapshot = await _firestore.collection('spots').get();
+    final categories = snapshot.docs
+        .map((doc) => (doc.data())['category'] as String)
+        .toSet()
         .toList();
+    return categories;
   }
 }
