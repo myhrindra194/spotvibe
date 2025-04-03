@@ -1,27 +1,34 @@
-import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_application_1/models/spot_model.dart';
 import 'package:flutter_application_1/repositories/spot_repository.dart';
+import 'package:flutter_application_1/viewmodels/auth_viewmodel.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 
 class SpotViewModel with ChangeNotifier {
-  final SpotRepository _repository = SpotRepository();
+  final SpotRepository _repository;
+  final AuthViewModel _authViewModel;
 
   List<Spot> _spots = [];
-  List<String> _categories = [];
   bool _isLoading = false;
-  String _searchQuery = '';
+  String? _searchQuery;
   String? _selectedCategory;
   bool? _visitedFilter;
 
+  SpotViewModel(this._repository, this._authViewModel);
+
   List<Spot> get spots => _spots;
-  List<String> get categories => _categories;
   bool get isLoading => _isLoading;
 
   List<Spot> get filteredSpots {
     return _spots.where((spot) {
-      final matchesSearch = _searchQuery.isEmpty ||
-          spot.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          spot.category.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          spot.specialty.toLowerCase().contains(_searchQuery.toLowerCase());
+      final matchesSearch = _searchQuery == null ||
+          _searchQuery!.isEmpty ||
+          spot.name.toLowerCase().contains(_searchQuery!.toLowerCase()) ||
+          spot.category.toLowerCase().contains(_searchQuery!.toLowerCase()) ||
+          spot.specialty.toLowerCase().contains(_searchQuery!.toLowerCase());
 
       final matchesCategory = _selectedCategory == null ||
           _selectedCategory!.isEmpty ||
@@ -35,13 +42,14 @@ class SpotViewModel with ChangeNotifier {
   }
 
   Future<void> loadSpots() async {
+    final userUid = _authViewModel.user?.id;
+    if (userUid == null) return;
+
     _isLoading = true;
     notifyListeners();
 
     try {
-      _spots = await _repository.getSpots().first;
-      _categories = await _repository.getCategories();
-      _categories = _categories.toSet().toList(); // Ensure unique categories
+      _spots = await _repository.getSpotsByUser(userUid).first;
     } catch (e) {
       debugPrint('Error loading spots: $e');
     } finally {
@@ -50,9 +58,30 @@ class SpotViewModel with ChangeNotifier {
     }
   }
 
-  Future<void> addSpot(Spot spot, {String? imagePath}) async {
+  Future<String?> _compressAndEncodeImage(File imageFile) async {
     try {
-      await _repository.addSpot(spot.copyWith(imagePath: imagePath));
+      final compressedImage = await FlutterImageCompress.compressWithFile(
+        imageFile.absolute.path,
+        quality: 70,
+        minWidth: 800,
+        minHeight: 800,
+      );
+
+      if (compressedImage == null) return null;
+      return base64Encode(compressedImage);
+    } catch (e) {
+      debugPrint('Image compression error: $e');
+      return null;
+    }
+  }
+
+  Future<void> addSpot(Spot spot, {File? imageFile}) async {
+    try {
+      String? imageBase64;
+      if (imageFile != null) {
+        imageBase64 = await _compressAndEncodeImage(imageFile);
+      }
+      await _repository.addSpot(spot.copyWith(imageBase64: imageBase64));
       await loadSpots();
     } catch (e) {
       debugPrint('Error adding spot: $e');
@@ -60,9 +89,13 @@ class SpotViewModel with ChangeNotifier {
     }
   }
 
-  Future<void> updateSpot(Spot spot, {String? imagePath}) async {
+  Future<void> updateSpot(Spot spot, {File? imageFile}) async {
     try {
-      await _repository.updateSpot(spot.copyWith(imagePath: imagePath));
+      String? imageBase64 = spot.imageBase64;
+      if (imageFile != null) {
+        imageBase64 = await _compressAndEncodeImage(imageFile);
+      }
+      await _repository.updateSpot(spot.copyWith(imageBase64: imageBase64));
       await loadSpots();
     } catch (e) {
       debugPrint('Error updating spot: $e');
@@ -70,11 +103,10 @@ class SpotViewModel with ChangeNotifier {
     }
   }
 
-  Future<void> deleteSpot(String id) async {
+  Future<void> deleteSpot(Spot spot) async {
     try {
-      await _repository.deleteSpot(id);
-      // Don't call loadSpots here to avoid widget tree issues
-      _spots.removeWhere((spot) => spot.id == id);
+      await _repository.deleteSpot(spot.id!);
+      _spots.removeWhere((s) => s.id == spot.id);
       notifyListeners();
     } catch (e) {
       debugPrint('Error deleting spot: $e');
@@ -82,14 +114,24 @@ class SpotViewModel with ChangeNotifier {
     }
   }
 
+  Future<List<String>> getCategories() async {
+    final userUid = _authViewModel.user?.id;
+    if (userUid == null) return [];
+    return await _repository.getCategories(userUid);
+  }
+
   void filterSpots({
     String? searchQuery,
     String? category,
     bool? visited,
   }) {
-    _searchQuery = searchQuery ?? '';
+    _searchQuery = searchQuery;
     _selectedCategory = category;
     _visitedFilter = visited;
     notifyListeners();
+  }
+
+  List<String> getCategoriesSync() {
+    return _spots.map((spot) => spot.category).toSet().toList();
   }
 }

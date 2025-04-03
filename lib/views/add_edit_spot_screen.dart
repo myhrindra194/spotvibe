@@ -1,16 +1,17 @@
-// ignore_for_file: use_build_context_synchronously
-
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/models/spot_model.dart';
-import 'package:flutter_application_1/viewmodels/spot_viewmodel.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
+
+import '../viewmodels/auth_viewmodel.dart';
+import '../viewmodels/spot_viewmodel.dart';
 
 class AddEditSpotScreen extends StatefulWidget {
   final Spot? spot;
@@ -39,13 +40,16 @@ class _AddEditSpotScreenState extends State<AddEditSpotScreen> {
   bool _isSearchingLocation = false;
   String? _placeName;
   bool _showCategoryTextField = false;
+  final _picker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
     _selectedLocation = widget.spot != null
         ? LatLng(
-            widget.spot!.location.latitude, widget.spot!.location.longitude)
+            widget.spot!.location.latitude,
+            widget.spot!.location.longitude,
+          )
         : const LatLng(-18.8792, 47.5079);
 
     if (widget.spot != null) {
@@ -57,7 +61,6 @@ class _AddEditSpotScreenState extends State<AddEditSpotScreen> {
     _nameController.text = spot.name;
     _categoryController.text = spot.category;
     _specialtyController.text = spot.specialty;
-    _selectedLocation = LatLng(spot.location.latitude, spot.location.longitude);
     _isVisited = spot.isVisited;
     _visitDate = spot.visitDate;
     _rating = spot.rating ?? 3;
@@ -68,7 +71,7 @@ class _AddEditSpotScreenState extends State<AddEditSpotScreen> {
   }
 
   Future<void> _pickImage() async {
-    final pickedFile = await ImagePicker().pickImage(
+    final pickedFile = await _picker.pickImage(
       source: ImageSource.gallery,
       maxWidth: 1200,
       maxHeight: 1200,
@@ -98,7 +101,10 @@ class _AddEditSpotScreenState extends State<AddEditSpotScreen> {
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Lieu non trouvé: ${e.toString()}')),
+        SnackBar(
+          content: Text('Location not found: ${e.toString()}'),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     } finally {
       if (mounted) {
@@ -132,7 +138,7 @@ class _AddEditSpotScreenState extends State<AddEditSpotScreen> {
     } catch (e) {
       debugPrint('Error getting place name: $e');
       if (mounted) {
-        setState(() => _placeName = 'Lieu inconnu');
+        setState(() => _placeName = 'Unknown location');
       }
     }
   }
@@ -141,7 +147,9 @@ class _AddEditSpotScreenState extends State<AddEditSpotScreen> {
     if (!_formKey.currentState!.validate() || _selectedLocation == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('Veuillez remplir tous les champs obligatoires')),
+          content: Text('Please fill all required fields'),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
       return;
     }
@@ -149,6 +157,10 @@ class _AddEditSpotScreenState extends State<AddEditSpotScreen> {
     setState(() => _isLoading = true);
 
     try {
+      final userUid =
+          Provider.of<AuthViewModel>(context, listen: false).user?.id;
+      if (userUid == null) throw Exception('User not authenticated');
+
       final spot = Spot(
         id: widget.spot?.id,
         name: _nameController.text.trim(),
@@ -158,25 +170,29 @@ class _AddEditSpotScreenState extends State<AddEditSpotScreen> {
           _selectedLocation!.longitude,
         ),
         specialty: _specialtyController.text.trim(),
-        imagePath: _imageFile?.path ?? widget.spot?.imagePath,
+        imageBase64: widget.spot?.imageBase64,
         createdAt: widget.spot?.createdAt ?? DateTime.now(),
         isVisited: _isVisited,
         visitDate: _isVisited ? _visitDate : null,
         rating: _isVisited ? _rating : null,
         comment: _isVisited ? _commentController.text.trim() : null,
+        userUid: userUid,
       );
 
       final viewModel = Provider.of<SpotViewModel>(context, listen: false);
       if (widget.spot == null) {
-        await viewModel.addSpot(spot, imagePath: _imageFile?.path);
+        await viewModel.addSpot(spot, imageFile: _imageFile);
       } else {
-        await viewModel.updateSpot(spot, imagePath: _imageFile?.path);
+        await viewModel.updateSpot(spot, imageFile: _imageFile);
       }
 
       if (mounted) Navigator.pop(context);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur: ${e.toString()}')),
+        SnackBar(
+          content: Text('Error: ${e.toString()}'),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -201,16 +217,19 @@ class _AddEditSpotScreenState extends State<AddEditSpotScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Confirmer la suppression'),
-        content: Text('Supprimer "${_nameController.text}" définitivement ?'),
+        title: const Text('Confirm Deletion'),
+        content: Text('Delete "${_nameController.text}" permanently?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Annuler'),
+            child: const Text('Cancel'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Supprimer', style: TextStyle(color: Colors.red)),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Colors.red),
+            ),
           ),
         ],
       ),
@@ -220,11 +239,14 @@ class _AddEditSpotScreenState extends State<AddEditSpotScreen> {
       setState(() => _isLoading = true);
       try {
         await Provider.of<SpotViewModel>(context, listen: false)
-            .deleteSpot(widget.spot!.id!);
+            .deleteSpot(widget.spot!);
         if (mounted) Navigator.pop(context);
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur: ${e.toString()}')),
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       } finally {
         if (mounted) setState(() => _isLoading = false);
@@ -232,39 +254,62 @@ class _AddEditSpotScreenState extends State<AddEditSpotScreen> {
     }
   }
 
+  Widget _buildImagePreview() {
+    if (_imageFile != null) {
+      return Image.file(
+        _imageFile!,
+        fit: BoxFit.cover,
+      );
+    } else if (widget.spot?.imageBase64 != null) {
+      return Image.memory(
+        base64Decode(widget.spot!.imageBase64!),
+        fit: BoxFit.cover,
+      );
+    } else {
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.camera_alt, size: 50, color: Colors.grey.shade400),
+          const SizedBox(height: 8),
+          Text('Add photo', style: TextStyle(color: Colors.grey.shade600)),
+        ],
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final viewModel = Provider.of<SpotViewModel>(context);
-    final categories = viewModel.categories;
+    final categories = viewModel.getCategoriesSync();
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.spot == null ? 'Nouveau Spot' : 'Modifier Spot'),
+        title: Text(widget.spot == null ? 'New Spot' : 'Edit Spot'),
         actions: [
           if (widget.spot != null)
             IconButton(
-              icon: const Icon(Icons.delete),
+              icon: const Icon(Icons.delete_outline),
               onPressed: _confirmDelete,
             ),
         ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Form(
-                key: _formKey,
+          : Form(
+              key: _formKey,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildImageSection(),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 24),
                     _buildBasicInfoSection(categories),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 24),
                     _buildLocationSection(),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 24),
                     _buildVisitInfoSection(),
-                    const SizedBox(height: 30),
+                    const SizedBox(height: 32),
                     _buildSubmitButton(),
                   ],
                 ),
@@ -276,45 +321,27 @@ class _AddEditSpotScreenState extends State<AddEditSpotScreen> {
   Widget _buildImageSection() {
     return Column(
       children: [
-        InkWell(
+        GestureDetector(
           onTap: _pickImage,
-          borderRadius: BorderRadius.circular(12),
           child: Container(
             height: 200,
+            width: double.infinity,
             decoration: BoxDecoration(
-              color: Colors.grey.shade200,
+              color: Colors.grey.shade100,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade400),
+              border: Border.all(color: Colors.grey.shade300, width: 1.5),
             ),
-            child: _imageFile != null
-                ? ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.file(_imageFile!, fit: BoxFit.cover),
-                  )
-                : widget.spot?.imagePath != null
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.file(
-                          File(widget.spot!.imagePath!),
-                          fit: BoxFit.cover,
-                        ),
-                      )
-                    : const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.camera_alt, size: 50),
-                            SizedBox(height: 8),
-                            Text('Ajouter une photo'),
-                          ],
-                        ),
-                      ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: _buildImagePreview(),
+            ),
           ),
         ),
-        if (_imageFile != null || widget.spot?.imagePath != null)
-          TextButton(
+        if (_imageFile != null || widget.spot?.imageBase64 != null)
+          TextButton.icon(
             onPressed: _pickImage,
-            child: const Text('Changer la photo'),
+            icon: const Icon(Icons.edit),
+            label: const Text('Change photo'),
           ),
       ],
     );
@@ -324,17 +351,20 @@ class _AddEditSpotScreenState extends State<AddEditSpotScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Informations de base',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 12),
+        Text('Basic Information',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                )),
+        const SizedBox(height: 16),
         TextFormField(
           controller: _nameController,
           decoration: const InputDecoration(
-            labelText: 'Nom du spot*',
+            labelText: 'Spot name*',
             border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.place),
           ),
           validator: (value) =>
-              value?.isEmpty ?? true ? 'Ce champ est requis' : null,
+              value?.isEmpty ?? true ? 'This field is required' : null,
         ),
         const SizedBox(height: 16),
         if (!_showCategoryTextField)
@@ -343,8 +373,9 @@ class _AddEditSpotScreenState extends State<AddEditSpotScreen> {
                 ? null
                 : _categoryController.text,
             decoration: const InputDecoration(
-              labelText: 'Catégorie*',
+              labelText: 'Category*',
               border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.category),
             ),
             items: [
               ...categories.map((category) => DropdownMenuItem(
@@ -357,7 +388,7 @@ class _AddEditSpotScreenState extends State<AddEditSpotScreen> {
                   children: [
                     Icon(Icons.add, size: 20),
                     SizedBox(width: 8),
-                    Text('Ajouter une nouvelle catégorie'),
+                    Text('Add new category'),
                   ],
                 ),
               ),
@@ -369,20 +400,19 @@ class _AddEditSpotScreenState extends State<AddEditSpotScreen> {
                   _categoryController.clear();
                 });
               } else if (value != null) {
-                setState(() {
-                  _categoryController.text = value;
-                });
+                setState(() => _categoryController.text = value);
               }
             },
-            validator: (value) => value == null ? 'Ce champ est requis' : null,
-            isExpanded: true,
+            validator: (value) =>
+                value == null ? 'This field is required' : null,
           ),
         if (_showCategoryTextField)
           TextFormField(
             controller: _categoryController,
             decoration: InputDecoration(
-              labelText: 'Nouvelle catégorie*',
+              labelText: 'New category*',
               border: const OutlineInputBorder(),
+              prefixIcon: const Icon(Icons.category),
               suffixIcon: IconButton(
                 icon: const Icon(Icons.arrow_back),
                 onPressed: () {
@@ -394,14 +424,15 @@ class _AddEditSpotScreenState extends State<AddEditSpotScreen> {
               ),
             ),
             validator: (value) =>
-                value?.isEmpty ?? true ? 'Ce champ est requis' : null,
+                value?.isEmpty ?? true ? 'This field is required' : null,
           ),
         const SizedBox(height: 16),
         TextFormField(
           controller: _specialtyController,
           decoration: const InputDecoration(
-            labelText: 'Spécialité',
+            labelText: 'Specialty',
             border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.star),
           ),
         ),
       ],
@@ -412,16 +443,18 @@ class _AddEditSpotScreenState extends State<AddEditSpotScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Localisation',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 12),
+        Text('Location',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                )),
+        const SizedBox(height: 16),
         Row(
           children: [
             Expanded(
               child: TextField(
                 controller: _locationSearchController,
                 decoration: const InputDecoration(
-                  labelText: 'Rechercher un lieu',
+                  labelText: 'Search location',
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.search),
                 ),
@@ -431,74 +464,81 @@ class _AddEditSpotScreenState extends State<AddEditSpotScreen> {
             ElevatedButton(
               onPressed: _isSearchingLocation ? null : _searchLocation,
               style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                shape: const CircleBorder(),
+                padding: const EdgeInsets.all(14),
               ),
               child: _isSearchingLocation
                   ? const SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
                     )
-                  : const Text('Chercher'),
+                  : const Icon(Icons.search),
             ),
           ],
         ),
         const SizedBox(height: 16),
-        const Text('Sélectionnez sur la carte :'),
+        const Text('Tap on the map to select location:'),
         const SizedBox(height: 8),
-        SizedBox(
-          height: 300,
-          child: FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(
-              initialCenter: _selectedLocation!,
-              initialZoom: 13.0,
-              onTap: (_, latLng) {
-                setState(() => _selectedLocation = latLng);
-                _updatePlaceName();
-              },
-            ),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.example.app',
+        Container(
+          height: 250,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter: _selectedLocation!,
+                initialZoom: 13.0,
+                onTap: (_, latLng) {
+                  setState(() => _selectedLocation = latLng);
+                  _updatePlaceName();
+                },
               ),
-              MarkerLayer(
-                markers: [
-                  Marker(
-                    width: 40.0,
-                    height: 40.0,
-                    point: _selectedLocation!,
-                    child: const Icon(
-                      Icons.location_pin,
-                      size: 40,
-                      color: Colors.red,
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                ),
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: _selectedLocation!,
+                      child: const Icon(
+                        Icons.location_pin,
+                        size: 40,
+                        color: Colors.red,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 16),
         Card(
           child: Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(16),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Lieu sélectionné :',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
+                Text('Selected Location',
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey.shade700)),
                 const SizedBox(height: 8),
-                Text(
-                  _placeName ?? 'Non spécifié',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 14),
-                ),
-                const SizedBox(height: 8),
+                Text(_placeName ?? 'Not specified'),
+                const SizedBox(height: 4),
                 Text(
                   '${_selectedLocation?.latitude.toStringAsFixed(5)}, '
                   '${_selectedLocation?.longitude.toStringAsFixed(5)}',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  style: TextStyle(color: Colors.grey.shade500),
                 ),
               ],
             ),
@@ -512,26 +552,28 @@ class _AddEditSpotScreenState extends State<AddEditSpotScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Informations de visite',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 12),
+        Text('Visit Information',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                )),
+        const SizedBox(height: 16),
         SwitchListTile(
-          title: const Text('Déjà visité ?'),
+          title: const Text('Already visited?'),
           value: _isVisited,
           onChanged: (value) => setState(() => _isVisited = value),
         ),
         if (_isVisited) ...[
           const SizedBox(height: 16),
           ListTile(
-            title: const Text('Date de visite'),
+            title: const Text('Visit date'),
             subtitle: Text(_visitDate != null
                 ? '${_visitDate!.day}/${_visitDate!.month}/${_visitDate!.year}'
-                : 'Non spécifiée'),
+                : 'Not specified'),
             trailing: const Icon(Icons.calendar_today),
             onTap: () => _selectDate(context),
           ),
           const SizedBox(height: 16),
-          const Text('Note :'),
+          const Text('Rating:'),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: List.generate(5, (index) {
@@ -549,8 +591,9 @@ class _AddEditSpotScreenState extends State<AddEditSpotScreen> {
           TextField(
             controller: _commentController,
             decoration: const InputDecoration(
-              labelText: 'Commentaire',
+              labelText: 'Comments',
               border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.comment),
             ),
             maxLines: 3,
           ),
@@ -566,9 +609,12 @@ class _AddEditSpotScreenState extends State<AddEditSpotScreen> {
         onPressed: _submit,
         style: ElevatedButton.styleFrom(
           padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
         child: Text(
-          widget.spot == null ? 'Ajouter le spot' : 'Mettre à jour',
+          widget.spot == null ? 'Add Spot' : 'Update Spot',
           style: const TextStyle(fontSize: 16),
         ),
       ),

@@ -1,8 +1,8 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/models/spot_model.dart';
+import 'package:flutter_application_1/repositories/spot_repository.dart';
 import 'package:flutter_application_1/viewmodels/auth_viewmodel.dart';
-import 'package:flutter_application_1/viewmodels/registration_viewmodel.dart';
 import 'package:flutter_application_1/viewmodels/spot_viewmodel.dart';
 import 'package:flutter_application_1/views/add_edit_spot_screen.dart';
 import 'package:flutter_application_1/views/auth/login_screen.dart';
@@ -26,11 +26,15 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthViewModel()),
-        ChangeNotifierProvider(create: (_) => RegistrationViewModel()),
-        ChangeNotifierProvider(
-          create: (_) => SpotViewModel(),
-          // Charge les spots dès l'initialisation
-          lazy: false,
+        ChangeNotifierProxyProvider<AuthViewModel, SpotViewModel>(
+          create: (context) => SpotViewModel(
+            SpotRepository(),
+            Provider.of<AuthViewModel>(context, listen: false),
+          ),
+          update: (context, authVm, spotVm) => SpotViewModel(
+            SpotRepository(),
+            authVm,
+          ),
         ),
       ],
       child: MaterialApp(
