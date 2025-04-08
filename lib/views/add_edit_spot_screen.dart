@@ -240,7 +240,7 @@ class _AddEditSpotScreenState extends State<AddEditSpotScreen> {
       try {
         await Provider.of<SpotViewModel>(context, listen: false)
             .deleteSpot(widget.spot!);
-        if (mounted) Navigator.pop(context);
+        if (mounted) Navigator.pushReplacementNamed(context, "/home");
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

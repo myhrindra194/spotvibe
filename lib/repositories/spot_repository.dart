@@ -4,7 +4,9 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_application_1/models/spot_model.dart';
+import 'package:flutter_application_1/services/location_service.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:latlong2/latlong.dart';
 
 class SpotRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -18,17 +20,41 @@ class SpotRepository {
         .map((snapshot) => snapshot.docs.map(Spot.fromFirestore).toList());
   }
 
-  Future<String?> _compressAndEncodeImage(File image) async {
+  Future<List<Spot>> getNearbySpots(LatLng userLocation,
+      {required double radiusKm}) async {
     try {
-      // Compress the image first
+      final spots = await _firestore.collection('spots').get();
+
+      return spots.docs
+          .map((doc) {
+            final spot = Spot.fromFirestore(doc);
+            final spotLocation =
+                LatLng(spot.location.latitude, spot.location.longitude);
+            final distance =
+                LocationService.calculateDistance(userLocation, spotLocation);
+
+            return spot.copyWith(distanceFromUser: distance);
+          })
+          .where((spot) =>
+              spot.distanceFromUser != null &&
+              spot.distanceFromUser! <= radiusKm)
+          .toList()
+        ..sort((a, b) =>
+            (a.distanceFromUser ?? 0).compareTo(b.distanceFromUser ?? 0));
+    } catch (e) {
+      debugPrint('Error getting nearby spots: $e');
+      rethrow;
+    }
+  }
+
+  Future<String?> compressAndEncodeImage(File image) async {
+    try {
       final compressedImage = await FlutterImageCompress.compressWithFile(
         image.absolute.path,
         quality: 70,
       );
 
       if (compressedImage == null) return null;
-
-      // Encode to base64
       return base64Encode(compressedImage);
     } catch (e) {
       debugPrint('Image compression error: $e');
@@ -36,28 +62,13 @@ class SpotRepository {
     }
   }
 
-  Future<void> addSpot(Spot spot, {File? imageFile}) async {
+  Future<void> addSpot(Spot spot) async {
     final docRef = _firestore.collection('spots').doc();
-    String? imageBase64;
-
-    if (imageFile != null) {
-      imageBase64 = await _compressAndEncodeImage(imageFile);
-    }
-
-    await docRef
-        .set(spot.copyWith(id: docRef.id, imageBase64: imageBase64).toMap());
+    await docRef.set(spot.copyWith(id: docRef.id).toMap());
   }
 
-  Future<void> updateSpot(Spot spot, {File? imageFile}) async {
-    String? imageBase64 = spot.imageBase64;
-
-    if (imageFile != null) {
-      imageBase64 = await _compressAndEncodeImage(imageFile);
-    }
-
-    await _firestore.collection('spots').doc(spot.id).update(
-          spot.copyWith(imageBase64: imageBase64).toMap(),
-        );
+  Future<void> updateSpot(Spot spot) async {
+    await _firestore.collection('spots').doc(spot.id).update(spot.toMap());
   }
 
   Future<void> deleteSpot(String id) async {

@@ -6,7 +6,7 @@ import '../repositories/auth_repository.dart';
 class RegistrationViewModel with ChangeNotifier {
   final AuthRepository _authRepository = AuthRepository();
   MyUser? _user;
-  String? errorMessage; // Rendre public
+  String? errorMessage;
   bool _isLoading = false;
 
   MyUser? get user => _user;
@@ -18,9 +18,7 @@ class RegistrationViewModel with ChangeNotifier {
 
     _authRepository.signUpWithEmail(email, password, name).then((user) {
       _user = user;
-      errorMessage = user == null
-          ? 'Password or email invalid'
-          : null; // Utiliser la propriété publique
+      errorMessage = user == null ? 'Password or email invalid' : null;
       _isLoading = false;
       notifyListeners();
     });

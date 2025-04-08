@@ -6,13 +6,14 @@ class Spot {
   final String category;
   final GeoPoint location;
   final String specialty;
-  final String? imageBase64; // Changé de imagePath à imageBase64
+  final String? imageBase64;
   final DateTime createdAt;
   final bool isVisited;
   final DateTime? visitDate;
   final int? rating;
   final String? comment;
   final String userUid;
+  final double? distanceFromUser;
 
   Spot({
     this.id,
@@ -27,6 +28,7 @@ class Spot {
     this.rating,
     this.comment,
     required this.userUid,
+    this.distanceFromUser,
   });
 
   factory Spot.fromFirestore(DocumentSnapshot doc) {
@@ -76,6 +78,7 @@ class Spot {
     int? rating,
     String? comment,
     String? userUid,
+    double? distanceFromUser,
   }) {
     return Spot(
       id: id ?? this.id,
@@ -90,6 +93,7 @@ class Spot {
       rating: rating ?? this.rating,
       comment: comment ?? this.comment,
       userUid: userUid ?? this.userUid,
+      distanceFromUser: distanceFromUser ?? this.distanceFromUser,
     );
   }
 }

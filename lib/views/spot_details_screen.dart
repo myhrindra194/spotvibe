@@ -15,29 +15,40 @@ class SpotDetailsScreen extends StatelessWidget {
   Future<void> _openMaps() async {
     final url =
         'https://www.google.com/maps/search/?api=1&query=${spot.location.latitude},${spot.location.longitude}';
-
-    try {
-      if (await canLaunchUrl(Uri.parse(url))) {
-        await launchUrl(
-          Uri.parse(url),
-          mode: LaunchMode.externalApplication,
-        );
-      } else {
-        final fallbackUrl =
-            'https://maps.google.com/maps?q=${spot.location.latitude},${spot.location.longitude}';
-        await launchUrl(
-          Uri.parse(fallbackUrl),
-          mode: LaunchMode.externalApplication,
-        );
-      }
-    } catch (e) {
-      SnackBar(content: Text('Could not launch maps: $e'));
+    if (await canLaunchUrl(Uri.parse(url))) {
+      await launchUrl(Uri.parse(url));
     }
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 24, bottom: 8),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: Colors.grey[600]),
+          const SizedBox(width: 8),
+          Expanded(child: Text(text)),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final dateFormat = DateFormat('dd/MM/yyyy');
+    final dateFormat = DateFormat('dd MMM yyyy');
 
     return Scaffold(
       appBar: AppBar(
@@ -54,151 +65,105 @@ class SpotDetailsScreen extends StatelessWidget {
         ],
       ),
       body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Hero(
               tag: 'spot-image-${spot.id}',
               child: spot.imageBase64 != null
-                  ? Image.memory(
-                      base64Decode(spot.imageBase64!),
-                      height: 250,
-                      fit: BoxFit.cover,
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.memory(
+                        base64Decode(spot.imageBase64!),
+                        height: 200,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                      ),
                     )
                   : Container(
-                      height: 250,
-                      color: Colors.grey.shade200,
-                      child: const Center(child: Icon(Icons.place, size: 50)),
+                      height: 200,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Center(
+                        child: Icon(
+                          Icons.place,
+                          size: 60,
+                          color: Theme.of(context).primaryColor,
+                        ),
+                      ),
                     ),
             ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    spot.name,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+            _buildSectionTitle('Details'),
+            _buildInfoRow(Icons.category, spot.category),
+            if (spot.specialty.isNotEmpty)
+              _buildInfoRow(Icons.star, 'Specialty: ${spot.specialty}'),
+            if (spot.isVisited) ...[
+              _buildSectionTitle('Visit Details'),
+              _buildInfoRow(
+                Icons.calendar_today,
+                spot.visitDate != null
+                    ? dateFormat.format(spot.visitDate!)
+                    : 'No date specified',
+              ),
+              if (spot.rating != null)
+                _buildInfoRow(
+                  Icons.star,
+                  'Rating: ${spot.rating}/5',
+                ),
+              if (spot.comment?.isNotEmpty ?? false) ...[
+                const SizedBox(height: 8),
+                const Text('Notes:',
+                    style: TextStyle(fontWeight: FontWeight.w500)),
+                Text(spot.comment!),
+              ],
+            ],
+            _buildSectionTitle('Location'),
+            SizedBox(
+              height: 200,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: FlutterMap(
+                  options: MapOptions(
+                    initialCenter: LatLng(
+                      spot.location.latitude,
+                      spot.location.longitude,
+                    ),
+                    initialZoom: 15,
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Icon(Icons.category, size: 16, color: Colors.grey),
-                      const SizedBox(width: 8),
-                      Text(
-                        spot.category,
-                        style: TextStyle(color: Colors.grey.shade700),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  if (spot.specialty.isNotEmpty) ...[
-                    Text(
-                      'Specialty: ${spot.specialty}',
-                      style: const TextStyle(fontSize: 16),
+                  children: [
+                    TileLayer(
+                      urlTemplate:
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                     ),
-                    const SizedBox(height: 16),
-                  ],
-                  if (spot.isVisited) ...[
-                    const Divider(),
-                    const Text(
-                      'Visit Information',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Icon(Icons.calendar_today, size: 16),
-                        const SizedBox(width: 8),
-                        Text(
-                          spot.visitDate != null
-                              ? dateFormat.format(spot.visitDate!)
-                              : 'No date specified',
-                        ),
-                      ],
-                    ),
-                    if (spot.rating != null) ...[
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          const Icon(Icons.star, size: 16, color: Colors.amber),
-                          const SizedBox(width: 8),
-                          Text('Rating: ${spot.rating}/5'),
-                        ],
-                      ),
-                    ],
-                    if (spot.comment?.isNotEmpty ?? false) ...[
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Comments:',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      Text(spot.comment!),
-                    ],
-                    const SizedBox(height: 16),
-                  ],
-                  const Divider(),
-                  const Text(
-                    'Location',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 200,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: FlutterMap(
-                        options: MapOptions(
-                          initialCenter: LatLng(
+                    MarkerLayer(
+                      markers: [
+                        Marker(
+                          point: LatLng(
                             spot.location.latitude,
                             spot.location.longitude,
                           ),
-                          initialZoom: 15,
+                          child: Icon(
+                            Icons.location_pin,
+                            size: 40,
+                            color: Theme.of(context).primaryColor,
+                          ),
                         ),
-                        children: [
-                          TileLayer(
-                            urlTemplate:
-                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                          ),
-                          MarkerLayer(
-                            markers: [
-                              Marker(
-                                point: LatLng(
-                                  spot.location.latitude,
-                                  spot.location.longitude,
-                                ),
-                                child: const Icon(
-                                  Icons.location_pin,
-                                  size: 40,
-                                  color: Colors.red,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.map),
-                    label: const Text('Open in Google Maps'),
-                    onPressed: _openMaps,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF6200EE),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.map),
+                label: const Text('Open in Maps'),
+                onPressed: _openMaps,
               ),
             ),
           ],

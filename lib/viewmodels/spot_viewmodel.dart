@@ -4,8 +4,10 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_application_1/models/spot_model.dart';
 import 'package:flutter_application_1/repositories/spot_repository.dart';
+import 'package:flutter_application_1/services/location_service.dart';
 import 'package:flutter_application_1/viewmodels/auth_viewmodel.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:latlong2/latlong.dart';
 
 class SpotViewModel with ChangeNotifier {
   final SpotRepository _repository;
@@ -16,11 +18,14 @@ class SpotViewModel with ChangeNotifier {
   String? _searchQuery;
   String? _selectedCategory;
   bool? _visitedFilter;
+  LatLng? _userLocation;
+  double _searchRadius = 5.0;
 
   SpotViewModel(this._repository, this._authViewModel);
 
   List<Spot> get spots => _spots;
   bool get isLoading => _isLoading;
+  double get searchRadius => _searchRadius;
 
   List<Spot> get filteredSpots {
     return _spots.where((spot) {
@@ -52,6 +57,30 @@ class SpotViewModel with ChangeNotifier {
       _spots = await _repository.getSpotsByUser(userUid).first;
     } catch (e) {
       debugPrint('Error loading spots: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadNearbySpots({required double radiusKm}) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      final position = await LocationService.getCurrentPosition();
+      _userLocation = LatLng(position.latitude, position.longitude);
+      _searchRadius = radiusKm;
+
+      _spots =
+          await _repository.getNearbySpots(_userLocation!, radiusKm: radiusKm);
+      _spots.sort((a, b) =>
+          (a.distanceFromUser ?? 0).compareTo(b.distanceFromUser ?? 0));
+
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error loading nearby spots: $e');
+      rethrow;
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -128,6 +157,11 @@ class SpotViewModel with ChangeNotifier {
     _searchQuery = searchQuery;
     _selectedCategory = category;
     _visitedFilter = visited;
+    notifyListeners();
+  }
+
+  void setSearchRadius(double radius) {
+    _searchRadius = radius;
     notifyListeners();
   }
 

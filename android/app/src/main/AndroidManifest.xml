@@ -1,7 +1,11 @@
 
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<!-- Ajoutez ces permissions AVANT la balise <application> -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.INTERNET" /> 
     <application
-        android:label="flutter_application_1"
+        android:label="SpotVibe"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
