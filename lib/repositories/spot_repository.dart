@@ -20,31 +20,25 @@ class SpotRepository {
         .map((snapshot) => snapshot.docs.map(Spot.fromFirestore).toList());
   }
 
-  Future<List<Spot>> getNearbySpots(LatLng userLocation,
-      {required double radiusKm}) async {
-    try {
-      final spots = await _firestore.collection('spots').get();
+  Future<List<Spot>> getNearbySpots(LatLng center,
+      {double radiusKm = 5.0, String? category}) async {
+    // Récupère tous les spots et filtre localement (pour une vraie app, utilisez GeoFirestore)
+    final querySnapshot = category != null
+        ? await _firestore
+            .collection('spots')
+            .where('category', isEqualTo: category)
+            .get()
+        : await _firestore.collection('spots').get();
 
-      return spots.docs
-          .map((doc) {
-            final spot = Spot.fromFirestore(doc);
-            final spotLocation =
-                LatLng(spot.location.latitude, spot.location.longitude);
-            final distance =
-                LocationService.calculateDistance(userLocation, spotLocation);
-
-            return spot.copyWith(distanceFromUser: distance);
-          })
-          .where((spot) =>
-              spot.distanceFromUser != null &&
-              spot.distanceFromUser! <= radiusKm)
-          .toList()
-        ..sort((a, b) =>
-            (a.distanceFromUser ?? 0).compareTo(b.distanceFromUser ?? 0));
-    } catch (e) {
-      debugPrint('Error getting nearby spots: $e');
-      rethrow;
-    }
+    return querySnapshot.docs
+        .map((doc) => Spot.fromFirestore(doc))
+        .where((spot) {
+      final distance = LocationService.calculateDistance(
+        center,
+        LatLng(spot.location.latitude, spot.location.longitude),
+      );
+      return distance <= radiusKm;
+    }).toList();
   }
 
   Future<String?> compressAndEncodeImage(File image) async {

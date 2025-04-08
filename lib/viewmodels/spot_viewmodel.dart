@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -14,37 +15,23 @@ class SpotViewModel with ChangeNotifier {
   final AuthViewModel _authViewModel;
 
   List<Spot> _spots = [];
+  List<Spot> _filteredSpots = [];
   bool _isLoading = false;
   String? _searchQuery;
   String? _selectedCategory;
   bool? _visitedFilter;
   LatLng? _userLocation;
   double _searchRadius = 5.0;
+  int _currentFilterIndex = 0; // 0:All, 1:Visited, 2:Not Visited, 3:Nearby
 
   SpotViewModel(this._repository, this._authViewModel);
 
   List<Spot> get spots => _spots;
+  List<Spot> get filteredSpots => _filteredSpots;
   bool get isLoading => _isLoading;
   double get searchRadius => _searchRadius;
-
-  List<Spot> get filteredSpots {
-    return _spots.where((spot) {
-      final matchesSearch = _searchQuery == null ||
-          _searchQuery!.isEmpty ||
-          spot.name.toLowerCase().contains(_searchQuery!.toLowerCase()) ||
-          spot.category.toLowerCase().contains(_searchQuery!.toLowerCase()) ||
-          spot.specialty.toLowerCase().contains(_searchQuery!.toLowerCase());
-
-      final matchesCategory = _selectedCategory == null ||
-          _selectedCategory!.isEmpty ||
-          spot.category == _selectedCategory;
-
-      final matchesVisited =
-          _visitedFilter == null || spot.isVisited == _visitedFilter;
-
-      return matchesSearch && matchesCategory && matchesVisited;
-    }).toList();
-  }
+  int get currentFilterIndex => _currentFilterIndex;
+  LatLng? get userLocation => _userLocation;
 
   Future<void> loadSpots() async {
     final userUid = _authViewModel.user?.id;
@@ -55,15 +42,18 @@ class SpotViewModel with ChangeNotifier {
 
     try {
       _spots = await _repository.getSpotsByUser(userUid).first;
+      _applyFilters();
     } catch (e) {
       debugPrint('Error loading spots: $e');
+      _resetSpotLists();
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  Future<void> loadNearbySpots({required double radiusKm}) async {
+  Future<void> loadNearbySpots(
+      {required double radiusKm, String? category}) async {
     try {
       _isLoading = true;
       notifyListeners();
@@ -72,19 +62,54 @@ class SpotViewModel with ChangeNotifier {
       _userLocation = LatLng(position.latitude, position.longitude);
       _searchRadius = radiusKm;
 
-      _spots =
-          await _repository.getNearbySpots(_userLocation!, radiusKm: radiusKm);
-      _spots.sort((a, b) =>
-          (a.distanceFromUser ?? 0).compareTo(b.distanceFromUser ?? 0));
+      final nearbySpots = await _repository.getNearbySpots(
+        _userLocation!,
+        radiusKm: radiusKm,
+        category: category,
+      );
 
-      notifyListeners();
+      _spots = nearbySpots.map((spot) {
+        final distance = spot.distanceFromUser ??
+            LocationService.calculateDistance(
+              _userLocation!,
+              LatLng(spot.location.latitude, spot.location.longitude),
+            );
+        return spot.copyWith(distanceFromUser: distance);
+      }).toList()
+        ..sort((a, b) =>
+            (a.distanceFromUser ?? 0).compareTo(b.distanceFromUser ?? 0));
+
+      _applyFilters();
     } catch (e) {
       debugPrint('Error loading nearby spots: $e');
+      _resetSpotLists();
       rethrow;
     } finally {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  void _applyFilters() {
+    _filteredSpots = _spots.where((spot) {
+      final matchesSearch = _searchQuery == null ||
+          _searchQuery!.isEmpty ||
+          spot.name.toLowerCase().contains(_searchQuery!.toLowerCase()) ||
+          spot.category.toLowerCase().contains(_searchQuery!.toLowerCase()) ||
+          (spot.specialty.toLowerCase().contains(_searchQuery!.toLowerCase()));
+
+      final matchesCategory = _selectedCategory == null ||
+          _selectedCategory!.isEmpty ||
+          spot.category == _selectedCategory;
+
+      final matchesVisited = _currentFilterIndex != 3
+          ? (_visitedFilter == null || spot.isVisited == _visitedFilter)
+          : true;
+
+      return matchesSearch && matchesCategory && matchesVisited;
+    }).toList();
+
+    notifyListeners();
   }
 
   Future<String?> _compressAndEncodeImage(File imageFile) async {
@@ -95,9 +120,7 @@ class SpotViewModel with ChangeNotifier {
         minWidth: 800,
         minHeight: 800,
       );
-
-      if (compressedImage == null) return null;
-      return base64Encode(compressedImage);
+      return compressedImage != null ? base64Encode(compressedImage) : null;
     } catch (e) {
       debugPrint('Image compression error: $e');
       return null;
@@ -106,10 +129,8 @@ class SpotViewModel with ChangeNotifier {
 
   Future<void> addSpot(Spot spot, {File? imageFile}) async {
     try {
-      String? imageBase64;
-      if (imageFile != null) {
-        imageBase64 = await _compressAndEncodeImage(imageFile);
-      }
+      final imageBase64 =
+          imageFile != null ? await _compressAndEncodeImage(imageFile) : null;
       await _repository.addSpot(spot.copyWith(imageBase64: imageBase64));
       await loadSpots();
     } catch (e) {
@@ -120,10 +141,9 @@ class SpotViewModel with ChangeNotifier {
 
   Future<void> updateSpot(Spot spot, {File? imageFile}) async {
     try {
-      String? imageBase64 = spot.imageBase64;
-      if (imageFile != null) {
-        imageBase64 = await _compressAndEncodeImage(imageFile);
-      }
+      final imageBase64 = imageFile != null
+          ? await _compressAndEncodeImage(imageFile)
+          : spot.imageBase64;
       await _repository.updateSpot(spot.copyWith(imageBase64: imageBase64));
       await loadSpots();
     } catch (e) {
@@ -136,7 +156,7 @@ class SpotViewModel with ChangeNotifier {
     try {
       await _repository.deleteSpot(spot.id!);
       _spots.removeWhere((s) => s.id == spot.id);
-      notifyListeners();
+      _applyFilters();
     } catch (e) {
       debugPrint('Error deleting spot: $e');
       rethrow;
@@ -145,27 +165,54 @@ class SpotViewModel with ChangeNotifier {
 
   Future<List<String>> getCategories() async {
     final userUid = _authViewModel.user?.id;
-    if (userUid == null) return [];
-    return await _repository.getCategories(userUid);
+    return userUid != null ? await _repository.getCategories(userUid) : [];
+  }
+
+  List<String> getCategoriesSync() {
+    return _spots.map((spot) => spot.category).toSet().toList();
   }
 
   void filterSpots({
     String? searchQuery,
     String? category,
     bool? visited,
+    int? filterIndex,
+    double? radius,
   }) {
     _searchQuery = searchQuery;
     _selectedCategory = category;
     _visitedFilter = visited;
-    notifyListeners();
+
+    if (filterIndex != null) {
+      _currentFilterIndex = filterIndex;
+    }
+
+    if (radius != null) {
+      _searchRadius = radius;
+    }
+
+    _applyFilters();
   }
 
   void setSearchRadius(double radius) {
     _searchRadius = radius;
-    notifyListeners();
+    if (_currentFilterIndex == 3) {
+      loadNearbySpots(radiusKm: radius, category: _selectedCategory);
+    } else {
+      _applyFilters();
+    }
   }
 
-  List<String> getCategoriesSync() {
-    return _spots.map((spot) => spot.category).toSet().toList();
+  void resetFilters() {
+    _searchQuery = null;
+    _selectedCategory = null;
+    _visitedFilter = null;
+    _currentFilterIndex = 0;
+    _applyFilters();
+  }
+
+  void _resetSpotLists() {
+    _spots = [];
+    _filteredSpots = [];
   }
 }

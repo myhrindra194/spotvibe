@@ -186,7 +186,7 @@ class _AddEditSpotScreenState extends State<AddEditSpotScreen> {
         await viewModel.updateSpot(spot, imageFile: _imageFile);
       }
 
-      if (mounted) Navigator.pop(context);
+      if (mounted) Navigator.pushReplacementNamed(context, "/home");
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

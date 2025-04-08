@@ -19,7 +19,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _searchController = TextEditingController();
   String? _selectedCategory;
-  int _currentFilterIndex = 0; // 0:All, 1:Visited, 2:Not Visited, 3:Nearby
+  int _currentFilterIndex = 0;
   double _radius = 5.0;
   bool _showSearchBar = false;
   bool _isLoadingLocation = false;
@@ -57,41 +57,17 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadNearbySpots(SpotViewModel viewModel) async {
+    if (!mounted) return;
     setState(() => _isLoadingLocation = true);
     try {
-      await viewModel.loadNearbySpots(radiusKm: _radius);
+      await viewModel.loadNearbySpots(
+        radiusKm: _radius,
+        category: _selectedCategory,
+      );
     } finally {
       if (mounted) {
         setState(() => _isLoadingLocation = false);
       }
-    }
-  }
-
-  Future<void> _logout(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title:
-            const Text('Confirm Logout', style: TextStyle(color: Colors.black)),
-        content: const Text('Are you sure you want to logout?',
-            style: TextStyle(color: Colors.black)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.black)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Logout', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      await Provider.of<AuthViewModel>(context, listen: false).signOut();
-      if (!mounted) return;
-      Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
     }
   }
 
@@ -100,44 +76,31 @@ class _HomeScreenState extends State<HomeScreen> {
     final viewModel = Provider.of<SpotViewModel>(context, listen: false);
 
     if (index == 3) {
-      // Nearby - charge les spots à proximité
       _loadNearbySpots(viewModel);
     } else {
-      // Applique le filtre localement
       viewModel.filterSpots(
         category: _selectedCategory,
-        visited: index == 1
-            ? true
-            : index == 2
-                ? false
-                : null,
+        visited: index == 1 ? true : (index == 2 ? false : null),
         searchQuery:
             _searchController.text.isNotEmpty ? _searchController.text : null,
+        filterIndex: index,
       );
     }
   }
 
   void _handleSearchChanged(String query) {
-    // Annule le timer précédent s'il existe
     if (_searchDebounce?.isActive ?? false) _searchDebounce?.cancel();
 
-    // Démarre un nouveau timer
     _searchDebounce = Timer(const Duration(milliseconds: 500), () {
-      if (_currentFilterIndex == 3) {
-        // Pour les spots à proximité, on recharge avec le nouveau filtre
-        _loadNearbySpots(Provider.of<SpotViewModel>(context, listen: false));
-      } else {
-        // Pour les autres filtres, on applique localement
-        Provider.of<SpotViewModel>(context, listen: false).filterSpots(
-          category: _selectedCategory,
-          visited: _currentFilterIndex == 1
-              ? true
-              : _currentFilterIndex == 2
-                  ? false
-                  : null,
-          searchQuery: query.isNotEmpty ? query : null,
-        );
-      }
+      final viewModel = Provider.of<SpotViewModel>(context, listen: false);
+      viewModel.filterSpots(
+        searchQuery: query.isNotEmpty ? query : null,
+        category: _selectedCategory,
+        visited: _currentFilterIndex == 1
+            ? true
+            : (_currentFilterIndex == 2 ? false : null),
+        filterIndex: _currentFilterIndex,
+      );
     });
   }
 
@@ -372,8 +335,12 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 16),
           Text(
             _currentFilterIndex == 3
-                ? 'No spots within $_radius km'
-                : 'No spots found',
+                ? _selectedCategory == null
+                    ? 'No spots within $_radius km'
+                    : 'No $_selectedCategory spots within $_radius km'
+                : _selectedCategory == null
+                    ? 'No spots found'
+                    : 'No $_selectedCategory spots found',
             style: GoogleFonts.poppins(
               fontSize: 18,
               color: Colors.grey[600],
@@ -389,7 +356,9 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ],
-          if (_selectedCategory != null || _currentFilterIndex > 0) ...[
+          if (_selectedCategory != null ||
+              _currentFilterIndex > 0 ||
+              _searchController.text.isNotEmpty) ...[
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () {
@@ -531,6 +500,34 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       },
     );
+  }
+
+  Future<void> _logout(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title:
+            const Text('Confirm Logout', style: TextStyle(color: Colors.black)),
+        content: const Text('Are you sure you want to logout?',
+            style: TextStyle(color: Colors.black)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.black)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Logout', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await Provider.of<AuthViewModel>(context, listen: false).signOut();
+      if (!mounted) return;
+      Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+    }
   }
 
   @override
