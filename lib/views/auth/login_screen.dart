@@ -131,7 +131,7 @@ class LoginScreenState extends State<LoginScreen> {
                 ),
                 SizedBox(height: 40),
                 SizedBox(
-                  width: double.infinity, // Prend toute la largeur disponible
+                  width: double.infinity,
                   child: ElevatedButton(
                     onPressed: authViewModel.isLoading
                         ? null
@@ -156,13 +156,13 @@ class LoginScreenState extends State<LoginScreen> {
                 ),
                 SizedBox(height: 20),
                 SizedBox(
-                  width: double.infinity, // Prend toute la largeur disponible
+                  width: double.infinity,
                   child: ElevatedButton(
                     onPressed: authViewModel.isLoading
                         ? null
                         : () => _signInWithGoogle(context),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white, // Fond blanc
+                      backgroundColor: Colors.white,
                       padding: EdgeInsets.symmetric(vertical: 15),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
@@ -181,7 +181,7 @@ class LoginScreenState extends State<LoginScreen> {
                           'Sign In with Google',
                           style: GoogleFonts.poppins(
                             fontSize: 16,
-                            color: Colors.grey[800], // Texte gris foncé
+                            color: Colors.grey[800],
                           ),
                         ),
                       ],

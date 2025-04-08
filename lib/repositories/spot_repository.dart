@@ -22,7 +22,6 @@ class SpotRepository {
 
   Future<List<Spot>> getNearbySpots(LatLng center,
       {double radiusKm = 5.0, String? category}) async {
-    // Récupère tous les spots et filtre localement (pour une vraie app, utilisez GeoFirestore)
     final querySnapshot = category != null
         ? await _firestore
             .collection('spots')
