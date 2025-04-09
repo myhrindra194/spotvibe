@@ -26,7 +26,7 @@ Application Flutter pour **lister et organiser mes lieux favoris** avec :
 
 ### 📍 Gestion des Spots
 - Ajout de spots avec photos
-- Suppression et modificationd des spots
+- Suppression et modification des spots
 - Système de notation (1-5 étoiles)
 - Commentaires et notes personnelles
 - Filtres avancés :
